@@ -665,3 +665,4 @@ SEE ALSO
     & $doList
     & $doInfo
 }
+Export-ModuleMember -Function hciconfig

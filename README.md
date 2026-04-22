@@ -35,28 +35,28 @@ $srcDir = "$env:TEMP\hciconf-W\hciconf-W-main"
 $srcPsd = "$srcDir\hciconfig.psd1"
 
 # 4. Création des dossiers
-$dest51 = "$env:USERPROFILE\Documents\WindowsPowerShell\Modules\hciconfig51"
-$dest7  = "$env:USERPROFILE\Documents\PowerShell\Modules\hciconfig7"
-New-Item -ItemType Directory -Force -Path $dest51 | Out-Null
+$dest5 = "$env:USERPROFILE\Documents\WindowsPowerShell\Modules\hciconfig5"
+$dest7  = "$env:USERPROFILE\Documents\PowerShell\Modules\hciconfig"
+New-Item -ItemType Directory -Force -Path $dest5 | Out-Null
 New-Item -ItemType Directory -Force -Path $dest7  | Out-Null
 
 # 5. Installation pour PowerShell 5.1 (avec hciconfig5.psm1)
-$src51 = "$srcDir\hciconfig5.psm1"
-if (Test-Path $src51) {
-    $target51 = "$dest51\hciconfig5.psm1"
-    if (Test-Path $target51) {
-        $rep = Read-Host "  [!] Deja installe dans $dest51`n      Ecraser ? (o/N)"
+$src5 = "$srcDir\hciconfig5.psm1"
+if (Test-Path $src5) {
+    $target5 = "$dest5\hciconfig5.psm1"
+    if (Test-Path $target5) {
+        $rep = Read-Host "  [!] Deja installe dans $dest5`n      Ecraser ? (o/N)"
         if ($rep -match '^[oO]$') {
-            Copy-Item $src51 $target51 -Force
-            Unblock-File $target51
-            if (Test-Path $srcPsd) { Copy-Item $srcPsd "$dest51\hciconfig.psd1" -Force }
-            Write-Host "  [OK] Installe pour PS5.1 : $dest51" -ForegroundColor Green
+            Copy-Item $src5 $target5 -Force
+            Unblock-File $target5
+            if (Test-Path $srcPsd) { Copy-Item $srcPsd "$dest5\hciconfig.psd1" -Force }
+            Write-Host "  [OK] Installe pour PS5.1 : $dest5" -ForegroundColor Green
         }
     } else {
-        Copy-Item $src51 $target51 -Force
-        Unblock-File $target51
-        if (Test-Path $srcPsd) { Copy-Item $srcPsd "$dest51\hciconfig.psd1" -Force }
-        Write-Host "  [OK] Installe pour PS5.1 : $dest51" -ForegroundColor Green
+        Copy-Item $src5 $target5 -Force
+        Unblock-File $target5
+        if (Test-Path $srcPsd) { Copy-Item $srcPsd "$dest5\hciconfig.psd1" -Force }
+        Write-Host "  [OK] Installe pour PS5.1 : $dest5" -ForegroundColor Green
     }
 }
 

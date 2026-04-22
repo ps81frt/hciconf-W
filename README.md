@@ -3,7 +3,9 @@
 Auteur : ps81frt  
 Repo   : https://github.com/ps81frt/hciconf-W  
 Fichier: `hciconfig.psm1`  
-Requis : PowerShell 5.1+ — Windows 10/11
+Requis : PowerShell **7+** — Windows 10/11
+
+> ⚠️ **PS 5.1 (Windows PowerShell) non supporté** : le script utilise l'opérateur null-conditional `?.` introduit en PS 7. Malgré la mention `5.1+` dans le fichier source, le chargement échoue sur PS 5.1.
 
 ---
 
@@ -18,7 +20,7 @@ Croise **4 sources** : PnP (chip physique), SWD\RADIO (nœud radio virtuel), WMI
 ## Installation
 
 ```powershell
-# 1. ExecutionPolicy — à faire une seule fois (session admin)
+# 1. ExecutionPolicy — à faire une seule fois
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 
 # 2. Téléchargement et extraction dans TEMP
@@ -30,10 +32,13 @@ Unblock-File "$env:TEMP\hciconf-W.zip"
 Expand-Archive "$env:TEMP\hciconf-W.zip" -DestinationPath "$env:TEMP\hciconf-W"
 Remove-Item "$env:TEMP\hciconf-W.zip"
 
-$src = "$env:TEMP\hciconf-W\hciconf-W-main\hciconfig.psm1"
+$srcDir = "$env:TEMP\hciconf-W\hciconf-W-main"
+$src    = "$srcDir\hciconfig.psm1"
+$srcPsd = "$srcDir\hciconfig.psd1"
 
-# 4. Déblocage du .psm1 extrait
+# 4. Déblocage des fichiers extraits
 Unblock-File $src
+if (Test-Path $srcPsd) { Unblock-File $srcPsd }
 
 # 5. Création des deux dossiers dans tous les cas (PS7 absent = dossier prêt pour plus tard)
 $dest51 = "$env:USERPROFILE\Documents\WindowsPowerShell\Modules\hciconfig"
@@ -53,6 +58,10 @@ foreach ($dest in @($dest51, $dest7)) {
     }
     Copy-Item $src $target -Force
     Unblock-File $target
+    if (Test-Path $srcPsd) {
+        Copy-Item $srcPsd "$dest\hciconfig.psd1" -Force
+        Unblock-File "$dest\hciconfig.psd1"
+    }
     Write-Host "  [OK] Installe : $dest" -ForegroundColor Green
 }
 

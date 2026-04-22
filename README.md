@@ -52,6 +52,7 @@ foreach ($dest in @($dest51, $dest7)) {
         }
     }
     Copy-Item $src $target -Force
+    Unblock-File $target
     Write-Host "  [OK] Installe : $dest" -ForegroundColor Green
 }
 

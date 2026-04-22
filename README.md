@@ -35,15 +35,15 @@ $srcDir = "$env:TEMP\hciconf-W\hciconf-W-main"
 $srcPsd = "$srcDir\hciconfig.psd1"
 
 # 4. Création des dossiers
-$dest51 = "$env:USERPROFILE\Documents\WindowsPowerShell\Modules\hciconfig"
-$dest7  = "$env:USERPROFILE\Documents\PowerShell\Modules\hciconfig"
+$dest51 = "$env:USERPROFILE\Documents\WindowsPowerShell\Modules\hciconfig51"
+$dest7  = "$env:USERPROFILE\Documents\PowerShell\Modules\hciconfig7"
 New-Item -ItemType Directory -Force -Path $dest51 | Out-Null
 New-Item -ItemType Directory -Force -Path $dest7  | Out-Null
 
 # 5. Installation pour PowerShell 5.1 (avec hciconfig5.psm1)
 $src51 = "$srcDir\hciconfig5.psm1"
 if (Test-Path $src51) {
-    $target51 = "$dest51\hciconfig.psm1"
+    $target51 = "$dest51\hciconfig5.psm1"
     if (Test-Path $target51) {
         $rep = Read-Host "  [!] Deja installe dans $dest51`n      Ecraser ? (o/N)"
         if ($rep -match '^[oO]$') {

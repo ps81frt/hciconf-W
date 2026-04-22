@@ -454,12 +454,12 @@ param(
         Write-Host "hciconfig -i -id 'BTHENUMxxxxxxxxx' -all *> monster.txt     #Export."
         Write-Host ""
     }
-
+    
     # ══════════════════════════════════════════════════════════════════════
     #  MAN
     # ══════════════════════════════════════════════════════════════════════
     $doMan = {
-        Write-Host @"
+        $txt = @"
 
 NAME
     hciconfig
@@ -542,7 +542,8 @@ SEE ALSO
     Get-WmiObject Win32_PnPEntity
     https://linux.die.net/man/8/hciconfig
 
-"@ -ForegroundColor Gray
+"@
+        Write-Host $txt -ForegroundColor Gray
     }
 
     # ══════════════════════════════════════════════════════════════════════

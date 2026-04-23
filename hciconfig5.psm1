@@ -38,12 +38,6 @@ param(
     #  COLLECTE ET CROISEMENT DES DONNEES
     # ══════════════════════════════════════════════════════════════════════
     $getData = {
-        # ── FIX 4 : P/Invoke BluetoothGetRadioInfo ─────────────────────────────
-        # Intel AX201 (et autres chipsets Bluetooth 5.x) ne stocke PAS LmpVersion
-        # dans le registre standard ni dans DEVPKEY. La seule source fiable est
-        # l'API Win32 bluetoothapis.dll / BluetoothGetRadioInfo.
-        # On déclare le type .NET une seule fois ici pour tout le bloc $getData.
-        # Si le type existe déjà (réappel dans la session) on l'ignore silencieusement.
         if (-not ([System.Management.Automation.PSTypeName]'HciConfig.BtRadioNative').Type) {
             try {
                 Add-Type -Namespace 'HciConfig' -Name 'BtRadioNative' -MemberDefinition @'
@@ -100,14 +94,9 @@ param(
     public static extern bool CloseHandle(System.IntPtr hObject);
 '@ -ErrorAction Stop
             } catch {
-                # Echec Add-Type (session déjà chargée ou plateforme incompatible) — on continue sans P/Invoke
                 Write-Verbose "[hciconfig] Add-Type BtRadioNative ignoré : $_"
             }
         }
-
-        # Helper : enumerate tous les handles radio BT via BluetoothFindFirstRadio
-        # Retourne une liste de [PSCustomObject]@{ BDAddr; LmpSubversion; Manufacturer }
-        # Chaque handle est fermé proprement. Retourne @() si P/Invoke non disponible.
         function Get-BtRadioInfoNative {
             $radios = @()
             $nativeAvailable = ([System.Management.Automation.PSTypeName]'HciConfig.BtRadioNative').Type
@@ -122,7 +111,6 @@ param(
                     $info = New-Object HciConfig.BtRadioNative+BLUETOOTH_RADIO_INFO
                     $info.dwSize = [System.Runtime.InteropServices.Marshal]::SizeOf($info)
                     if ([HciConfig.BtRadioNative]::BluetoothGetRadioInfo($hRadio, [ref]$info) -eq 0) {
-                        # Adresse BD : 6 bytes LSB-first → on inverse pour affichage MSB-first
                         $macBytes = $info.address[5..0]
                         $bdStr = ($macBytes | ForEach-Object { '{0:X2}' -f $_ }) -join ':'
                         $radios += [PSCustomObject]@{
@@ -141,32 +129,21 @@ param(
             return $radios
         }
 
-        # On pré-charge les infos radio natives une seule fois pour tout le foreach suivant
         $nativeRadios = Get-BtRadioInfoNative
-        # 1. Chip physique BT — classe Bluetooth (USB\VID_... ou PCI)
         $pnpAll = Get-PnpDevice -Class Bluetooth -ErrorAction SilentlyContinue |
                   Where-Object { $_.InstanceId -notlike 'BTHENUM\*' -and $_.InstanceId -notlike 'BTH\*' -and $_.InstanceId -notlike 'BTHLE\*' }
 
-        # 2. Noeuds radio virtuels SWD\RADIO\BLUETOOTH_* (un par adaptateur)
         $swdAll = Get-PnpDevice -ErrorAction SilentlyContinue |
                   Where-Object { $_.InstanceId -like 'SWD\RADIO\BLUETOOTH*' }
 
-        # 3. WMI — tous peripheriques BT
         $wmiAll = Get-WmiObject -Query "SELECT * FROM Win32_PnPEntity WHERE Caption LIKE '%Bluetooth%'" -ErrorAction SilentlyContinue
 
-        # 4. Construction d'objets fusionnes : chip USB + noeud SWD\RADIO
         $result = foreach ($p in $pnpAll) {
 
-            # Cherche le noeud SWD correspondant via l'adresse MAC dans l'InstanceId
-            # USB InstanceId ex: USB\VID_8087&PID_0029\8&2EFE0359&0&4
-            # SWD InstanceId ex: SWD\RADIO\BLUETOOTH_50E085885F1C  (MAC = adresse BD)
-            # On cherche le SWD dont le statut correspond (meme adaptateur)
             $swd = $swdAll | Select-Object -First 1
 
-            # Cherche la correspondance WMI
             $wmi = $wmiAll | Where-Object { $_.DeviceID -eq $p.InstanceId } | Select-Object -First 1
 
-            # Infos driver chip USB
             $props = Get-PnpDeviceProperty -InstanceId $p.InstanceId -ErrorAction SilentlyContinue
             $driver     = ($props | Where-Object { $_.KeyName -eq 'DEVPKEY_Device_DriverVersion'        }).Data
             $driverDate = ($props | Where-Object { $_.KeyName -eq 'DEVPKEY_Device_DriverDate'           }).Data
@@ -184,26 +161,21 @@ param(
             $busAddr    = ($props | Where-Object { $_.KeyName -eq 'DEVPKEY_Device_Address'              }).Data
             $uiNum      = ($props | Where-Object { $_.KeyName -eq 'DEVPKEY_Device_UINumber'             }).Data
 
-            # Infos noeud SWD\RADIO (adresse BD + statut radio UP/DOWN)
             $bdAddress  = $null
             $radioUp    = $null
             if ($swd) {
-                # Extrait MAC depuis InstanceId : SWD\RADIO\BLUETOOTH_50E085885F1C
                 $macRaw = $swd.InstanceId -replace '.*BLUETOOTH_', ''
                 if ($macRaw -match '^[0-9A-Fa-f]{12}$') {
                     $bdAddress = ($macRaw -split '(?<=\G.{2})(?=.)') -join ':'
                 }
-                # UP = device present et status OK, DOWN = disabled/error
                 $radioUp = if ($swd.Status -eq 'OK') { 'UP' } else { 'DOWN' }
 
-                # Infos props SWD
                 $swdProps   = Get-PnpDeviceProperty -InstanceId $swd.InstanceId -ErrorAction SilentlyContinue
                 $btVersion  = ($swdProps | Where-Object { $_.KeyName -eq 'DEVPKEY_Bluetooth_RadioVersion' }).Data
                 $btManuf    = ($swdProps | Where-Object { $_.KeyName -eq 'DEVPKEY_Bluetooth_RadioManufacturer' }).Data
             }
 
-            # LMP Version -> version BT spec
-            # Cherche dans plusieurs emplacements (Intel, Broadcom, etc.)
+
             $lmpVersion = $null; $lmpSubVersion = $null; $btSpec = $null; $btFreq = '2.4 GHz (2402-2480 MHz, FHSS)'
             $lmpSpecMap = @{0='1.0b';1='1.1';2='1.2';3='2.0+EDR';4='2.1+EDR';5='3.0+HS';6='4.0';7='4.1';8='4.2';9='5.0';10='5.1';11='5.2';12='5.3';13='5.4'}
             $regCandidates = @(
@@ -211,53 +183,39 @@ param(
                 "HKLM:\SYSTEM\CurrentControlSet\Enum\$($p.InstanceId)\Device Parameters\Bluetooth"
             )
             foreach ($regPath in $regCandidates) {
-                if ($null -ne $lmpVersion) { break }   # FIX PSA: $null à gauche (PSPossibleIncorrectComparisonWithNull)
+                if ($null -ne $lmpVersion) { break }
                 if (Test-Path $regPath) {
                     $r1 = Get-ItemProperty $regPath -Name 'LmpVersion'    -ErrorAction SilentlyContinue; if ($r1) { $lmpVersion    = $r1.LmpVersion }
                     $r2 = Get-ItemProperty $regPath -Name 'LmpSubversion' -ErrorAction SilentlyContinue; if ($r2) { $lmpSubVersion = $r2.LmpSubversion }
                 }
             }
-            # Fallback : DEVPKEY_Bluetooth_RadioLmpVersion sur le noeud SWD
-            if ($null -eq $lmpVersion -and $swd) {   # FIX PSA: $null à gauche (PSPossibleIncorrectComparisonWithNull)
+            if ($null -eq $lmpVersion -and $swd) {
                 $lmpVersion    = ($swdProps | Where-Object { $_.KeyName -eq 'DEVPKEY_Bluetooth_RadioLmpVersion'    }).Data
                 $lmpSubVersion = ($swdProps | Where-Object { $_.KeyName -eq 'DEVPKEY_Bluetooth_RadioLmpSubversion' }).Data
             }
-            # Fallback : service registry (Broadcom btusb, etc.)
-            if ($null -eq $lmpVersion -and $service) {   # FIX PSA: $null à gauche (PSPossibleIncorrectComparisonWithNull)
+            if ($null -eq $lmpVersion -and $service) {
                 $btRegSvc = "HKLM:\SYSTEM\CurrentControlSet\Services\$service\Parameters"
                 if (Test-Path $btRegSvc) {
                     $r3 = Get-ItemProperty $btRegSvc -Name 'LmpVersion'    -ErrorAction SilentlyContinue; if ($r3) { $lmpVersion    = $r3.LmpVersion }
                     $r4 = Get-ItemProperty $btRegSvc -Name 'LmpSubversion' -ErrorAction SilentlyContinue; if ($r4) { $lmpSubVersion = $r4.LmpSubversion }
                 }
             }
-            if ($null -ne $lmpVersion) { $btSpec = $lmpSpecMap[[int]$lmpVersion] }   # FIX PSA: $null à gauche (PSPossibleIncorrectComparisonWithNull)
+            if ($null -ne $lmpVersion) { $btSpec = $lmpSpecMap[[int]$lmpVersion] }
 
-            # FIX 4 — Fallback BluetoothGetRadioInfo P/Invoke (Intel AX201 et chipsets sans LmpVersion registre)
-            # Tenté UNIQUEMENT si les fallbacks registre + DEVPKEY + service n'ont rien donné.
-            # On matche le noeud natif par BD Address (déjà calculée depuis SWD\RADIO\BLUETOOTH_<MAC>).
-            # BluetoothGetRadioInfo retourne LmpSubversion + Manufacturer mais PAS LmpVersion directement.
-            # Pour Intel AX201/AX210 : LmpSubversion encode la version BT dans les bits hauts selon la
-            # convention Intel (subversion >= 0x0100 → BT 5.x). On utilise $btManuf (code fabricant BT SIG)
-            # pour affiner : Intel = 0x0002, Qualcomm = 0x000A, MediaTek = 0x0046, etc.
-            # Si on a toujours $null sur LmpVersion après P/Invoke, on affiche au moins BT Manuf + SubVer.
+
             if ($null -eq $lmpVersion -and $nativeRadios -and $bdAddress) {
                 $matchedNative = $nativeRadios | Where-Object { $_.BDAddr -eq $bdAddress } | Select-Object -First 1
                 if ($matchedNative) {
-                    # LmpSubversion disponible via P/Invoke — on la stocke si pas déjà remplie par DEVPKEY
                     if ($null -eq $lmpSubVersion) { $lmpSubVersion = $matchedNative.LmpSubversion }
-                    # Tentative d'inférence LmpVersion depuis LmpSubversion Intel
-                    # Intel encode : bits [15:8] = LMP major, bits [7:0] = minor (empirique, AX201/AX210)
-                    # Cette heuristique couvre les chipsets Intel courants ; pour les autres on laisse $null.
+
                     if ($null -eq $lmpVersion -and $matchedNative.Manufacturer -eq 0x0002) {
-                        # Intel : LmpSubversion format 0xMMmm où MM = version BT spec (ex: 0x0C = 12 → BT 5.3)
                         $inferredLmp = [int](($matchedNative.LmpSubversion -band 0xFF00) -shr 8)
                         if ($inferredLmp -gt 0 -and $lmpSpecMap.ContainsKey($inferredLmp)) {
                             $lmpVersion = $inferredLmp
                             $btSpec     = $lmpSpecMap[$inferredLmp] + ' (infere Intel P/Invoke)'
                         }
                     }
-                    # Pour les autres fabricants : on ne déduit pas (trop risqué), on affiche juste subver + manuf
-                    # Le champ BTManuf sera complété plus bas via $btManuf depuis DEVPKEY si disponible
+
                 }
             }
 
@@ -310,9 +268,6 @@ param(
         Write-Host ""
         foreach ($d in $devices) {
             $color = if ($d.Statut -eq 'OK') { 'Green' } elseif ($d.Statut -eq 'Error') { 'Red' } else { 'Yellow' }
-            # FIX PSA: $radioColor était assigné mais jamais utilisé (PSUseDeclaredVarsMoreThanAssignments).
-            # On calcule la couleur inline directement dans le Write-Host pour éliminer la variable morte,
-            # sans modifier le comportement d'affichage ni la logique $radioStr existante.
             $radioStr = if ($d.RadioUp) { " [$($d.RadioUp)]" } else { '' }
             Write-Host "  [$($d.Statut)]$radioStr $($d.Nom)" -ForegroundColor $(
                 if ($d.Statut -eq 'OK') { 'Green' } elseif ($d.Statut -eq 'Error') { 'Red' } else { 'Yellow' }
@@ -407,7 +362,6 @@ param(
             Write-Host ""
         }
 
-        # Bonus : peripheriques pairies (hors adaptateurs)
         if (-not $id) {
         Write-Host "  $('─' * 60)" -ForegroundColor DarkGray
         Write-Host "  PERIPHERIQUES PAIRIES / PROFILS BT (WMI)" -ForegroundColor DarkGray
@@ -625,12 +579,6 @@ $doMan = {
                         if ($eDrvDt) { Write-Host "  Date         : $(([datetime]$eDrvDt).ToString('yyyy-MM-dd'))" }
                     }
 
-                    # FIX 3 — -all combiné avec -i -id sur un périphérique BTHENUM/BTH/BTHLE :
-                    # Avant, le flag $all était silencieusement ignoré car la branche ne le testait jamais.
-                    # Maintenant : si -all est actif on dump l'intégralité des DEVPKEY disponibles pour
-                    # ce noeud, exactement comme le ferait hciconfig -a hci0 sur Linux (verbose complet).
-                    # La logique existante (Identite/Etat/Identifiants/Driver) est inchangée — on ajoute
-                    # juste une section supplémentaire conditionnelle en fin de bloc.
                     if ($a -or $all) {
                         Write-Host ""
                         Write-Host "  ── Proprietes etendues (-all) ────────────────────────" -ForegroundColor DarkMagenta
@@ -658,7 +606,6 @@ $doMan = {
         return
     }
 
-    # defaut : liste courte + detail
     $devicesToShow = & $getData
     & $doList
     & $doInfo

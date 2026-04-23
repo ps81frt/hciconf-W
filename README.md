@@ -20,6 +20,7 @@ Croise **4 sources** : PnP (chip physique), SWD\RADIO (nœud radio virtuel), WMI
 ## Installation
 
 ```powershell
+& {
 # 1. ExecutionPolicy
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 
@@ -28,64 +29,68 @@ Invoke-WebRequest https://github.com/ps81frt/hciconf-W/archive/refs/heads/main.z
 
 # 3. Déblocage et extraction
 Unblock-File "$env:TEMP\hciconf-W.zip"
-Expand-Archive "$env:TEMP\hciconf-W.zip" -DestinationPath "$env:TEMP\hciconf-W"
+Expand-Archive "$env:TEMP\hciconf-W.zip" -DestinationPath "$env:TEMP\hciconf-W" -Force
 Remove-Item "$env:TEMP\hciconf-W.zip"
 
 $srcDir = "$env:TEMP\hciconf-W\hciconf-W-main"
 $srcPsd = "$srcDir\hciconfig.psd1"
 
 # 4. Création des dossiers
-$dest5 = "$env:USERPROFILE\Documents\WindowsPowerShell\Modules\hciconfig5"
-$dest7  = "$env:USERPROFILE\Documents\PowerShell\Modules\hciconfig"
+$dest5 = "$env:USERPROFILE\Documents\WindowsPowerShell\Modules\hciconfig"
+$dest7 = "$env:USERPROFILE\Documents\PowerShell\Modules\hciconfig"
 New-Item -ItemType Directory -Force -Path $dest5 | Out-Null
-New-Item -ItemType Directory -Force -Path $dest7  | Out-Null
+New-Item -ItemType Directory -Force -Path $dest7 | Out-Null
 
-# 5. Installation pour PowerShell 5.1 (avec hciconfig5.psm1)
+# 5. Installation pour PowerShell 5.1 (hciconfig5.psm1 -> hciconfig.psm1)
 $src5 = "$srcDir\hciconfig5.psm1"
 if (Test-Path $src5) {
-    $target5 = "$dest5\hciconfig5.psm1"
-    if (Test-Path $target5) {
-        $rep = Read-Host "  [!] Deja installe dans $dest5`n      Ecraser ? (o/N)"
-        if ($rep -match '^[oO]$') {
-            Copy-Item $src5 $target5 -Force
-            Unblock-File $target5
-            if (Test-Path $srcPsd) { Copy-Item $srcPsd "$dest5\hciconfig.psd1" -Force }
-            Write-Host "  [OK] Installe pour PS5.1 : $dest5" -ForegroundColor Green
-        }
-    } else {
-        Copy-Item $src5 $target5 -Force
-        Unblock-File $target5
-        if (Test-Path $srcPsd) { Copy-Item $srcPsd "$dest5\hciconfig.psd1" -Force }
-        Write-Host "  [OK] Installe pour PS5.1 : $dest5" -ForegroundColor Green
+    $target5 = "$dest5\hciconfig.psm1"
+    
+    # Supprimer l'ancien silencieusement
+    if (Test-Path $target5) { Remove-Item $target5 -Force }
+    
+    # Copier et renommer
+    Copy-Item $src5 $target5 -Force
+    Unblock-File $target5
+    
+    # Copier et adapter le psd1
+    if (Test-Path $srcPsd) { 
+        Copy-Item $srcPsd "$dest5\hciconfig.psd1" -Force
+        # Modifier RootModule pour pointer vers hciconfig.psm1 (déjà bon)
     }
+    
+    Write-Host "  [OK] Installe pour PS5.1 : $dest5" -ForegroundColor Green
+    Write-Host "       (hciconfig5.psm1 -> hciconfig.psm1)" -ForegroundColor DarkGray
 }
 
-# 6. Installation pour PowerShell 7 (avec hciconfig.psm1 original)
+# 6. Installation pour PowerShell 7 (hciconfig.psm1 original)
 $src7 = "$srcDir\hciconfig.psm1"
 if (Test-Path $src7) {
     $target7 = "$dest7\hciconfig.psm1"
-    if (Test-Path $target7) {
-        $rep = Read-Host "  [!] Deja installe dans $dest7`n      Ecraser ? (o/N)"
-        if ($rep -match '^[oO]$') {
-            Copy-Item $src7 $target7 -Force
-            Unblock-File $target7
-            if (Test-Path $srcPsd) { Copy-Item $srcPsd "$dest7\hciconfig.psd1" -Force }
-            Write-Host "  [OK] Installe pour PS7 : $dest7" -ForegroundColor Green
-        }
-    } else {
-        Copy-Item $src7 $target7 -Force
-        Unblock-File $target7
-        if (Test-Path $srcPsd) { Copy-Item $srcPsd "$dest7\hciconfig.psd1" -Force }
-        Write-Host "  [OK] Installe pour PS7 : $dest7" -ForegroundColor Green
+    
+    # Supprimer l'ancien silencieusement
+    if (Test-Path $target7) { Remove-Item $target7 -Force }
+    
+    # Copier sans renommer
+    Copy-Item $src7 $target7 -Force
+    Unblock-File $target7
+    
+    # Copier le psd1
+    if (Test-Path $srcPsd) { 
+        Copy-Item $srcPsd "$dest7\hciconfig.psd1" -Force
     }
+    
+    Write-Host "  [OK] Installe pour PS7 : $dest7" -ForegroundColor Green
+    Write-Host "       (hciconfig.psm1 original)" -ForegroundColor DarkGray
 }
 
 # 7. Nettoyage
-Remove-Item "$env:TEMP\hciconf-W" -Recurse
+Remove-Item "$env:TEMP\hciconf-W" -Recurse -Force
 
 Write-Host "`n  [OK] Installation terminee !" -ForegroundColor Green
 Write-Host "  Pour PS5.1 : powershell -Version 5.1" -ForegroundColor Cyan
 Write-Host "  Pour PS7    : pwsh" -ForegroundColor Cyan
+}
 ```
 
 Pour vérifier :

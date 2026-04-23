@@ -52,7 +52,11 @@ if (Test-Path $src5) {
     # Copier et renommer
     Copy-Item $src5 $target5 -Force
     Unblock-File $target5
-    
+
+    # FORCER UTF-8 BOM (FCK GitHub me le retire Grrrrrr)
+    $content = Get-Content $target5 -Raw
+    [System.IO.File]::WriteAllText($target5, $content, [System.Text.UTF8Encoding]::new($true))
+
     # Copier et adapter le psd1
     if (Test-Path $srcPsd) { 
         Copy-Item $srcPsd "$dest5\hciconfig.psd1" -Force

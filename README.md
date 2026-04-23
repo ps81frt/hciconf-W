@@ -56,7 +56,6 @@ if (Test-Path $src5) {
     # Copier et adapter le psd1
     if (Test-Path $srcPsd) { 
         Copy-Item $srcPsd "$dest5\hciconfig.psd1" -Force
-        # Modifier RootModule pour pointer vers hciconfig.psm1 (déjà bon)
     }
     
     Write-Host "  [OK] Installe pour PS5.1 : $dest5" -ForegroundColor Green

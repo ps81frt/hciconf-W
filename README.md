@@ -25,7 +25,7 @@ Croise **4 sources** : PnP (chip physique), SWD\RADIO (nœud radio virtuel), WMI
 Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force
 
 # 2. Téléchargement et extraction
-Invoke-WebRequest https://github.com/ps81frt/hciconf-W/archive/refs/heads/main.zip -OutFile "$env:TEMP\hciconf-W.zip"
+Invoke-WebRequest https://github.com/ps81frt/hciconf-W/releases/download/1.0/hciconfig.zip -OutFile "$env:TEMP\hciconf-W.zip"
 
 # 3. Déblocage et extraction
 Unblock-File "$env:TEMP\hciconf-W.zip"

@@ -1,9 +1,10 @@
 # hciconfig-W
 
-Auteur : ps81frt  
-Repo   : https://github.com/ps81frt/hciconf-W  
-Fichier: `hciconfig.psm1`  
-Requis : PowerShell **7+** — Windows 10/11
+- Auteur : ps81frt  
+- Repo   : https://github.com/ps81frt/hciconf-W  
+- Release: https://github.com/ps81frt/hciconf-W/releases/tag/1.0  
+- Fichier: `hciconfig.psm1`  
+- Requis : PowerShell **7+** — Windows 10/11
 
 > ⚠️ **PS 5.1 (Windows PowerShell) non supporté** : le script utilise l'opérateur null-conditional `?.` introduit en PS 7. Malgré la mention `5.1+` dans le fichier source, le chargement échoue sur PS 5.1.
 

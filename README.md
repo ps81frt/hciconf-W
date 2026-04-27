@@ -94,11 +94,18 @@ if (Test-Path $src7) {
     Write-Host "       (hciconfig.psm1 original)" -ForegroundColor DarkGray
 }
 
-# 7. PSModulePath persistant PS7 si manquant
+# 7. PSModulePath persistant PS5.1 et PS7 si manquants
+$modPath5 = "$env:USERPROFILE\Documents\WindowsPowerShell\Modules"
 $modPath7 = "$env:USERPROFILE\Documents\PowerShell\Modules"
 $currentPath = [System.Environment]::GetEnvironmentVariable('PSModulePath', 'User')
+if ($currentPath -notlike "*$modPath5*") {
+    $currentPath = "$currentPath;$modPath5"
+    [System.Environment]::SetEnvironmentVariable('PSModulePath', $currentPath, 'User')
+    Write-Host "  [OK] PSModulePath PS5.1 mis a jour" -ForegroundColor Green
+}
 if ($currentPath -notlike "*$modPath7*") {
-    [System.Environment]::SetEnvironmentVariable('PSModulePath', "$currentPath;$modPath7", 'User')
+    $currentPath = "$currentPath;$modPath7"
+    [System.Environment]::SetEnvironmentVariable('PSModulePath', $currentPath, 'User')
     Write-Host "  [OK] PSModulePath PS7 mis a jour" -ForegroundColor Green
 }
 

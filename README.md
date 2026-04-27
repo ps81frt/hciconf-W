@@ -32,7 +32,7 @@ Unblock-File "$env:TEMP\hciconf-W.zip"
 Expand-Archive "$env:TEMP\hciconf-W.zip" -DestinationPath "$env:TEMP\hciconf-W" -Force
 Remove-Item "$env:TEMP\hciconf-W.zip"
 
-$srcDir = "$env:TEMP\hciconf-W\hciconf-W-main"
+$srcDir = "$env:TEMP\hciconf-W"
 $srcPsd = "$srcDir\hciconfig.psd1"
 
 # 4. Création des dossiers
@@ -53,9 +53,13 @@ if (Test-Path $src5) {
     Copy-Item $src5 $target5 -Force
     Unblock-File $target5
 
-    # FORCER UTF-8 BOM (FCK GitHub me le retire Grrrrrr)
-    $content = Get-Content $target5 -Raw
-    [System.IO.File]::WriteAllText($target5, $content, [System.Text.UTF8Encoding]::new($true))
+    # FORCER UTF-8 BOM sans réinterpréter le contenu (lecture bytes bruts)
+    $bytes = [System.IO.File]::ReadAllBytes($target5)
+    if ($bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
+        $bom   = [byte[]](0xEF, 0xBB, 0xBF)
+        $bytes = $bom + $bytes
+        [System.IO.File]::WriteAllBytes($target5, $bytes)
+    }
 
     # Copier et adapter le psd1
     if (Test-Path $srcPsd) { 

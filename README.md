@@ -2,7 +2,7 @@
 
 - Auteur : ps81frt  
 - Repo   : https://github.com/ps81frt/hciconf-W  
-- Release: https://github.com/ps81frt/hciconf-W/releases/tag/1.0  
+- Release: [v1.0](https://github.com/ps81frt/hciconf-W/releases/tag/1.0)
 - Fichier: `hciconfig.psm1`  
 - Requis : PowerShell **7+** — Windows 10/11
 

@@ -15,6 +15,10 @@ Fonction PowerShell équivalente à `hciconfig` Linux.
 Liste, inspecte, active et désactive les adaptateurs Bluetooth.  
 Croise **4 sources** : PnP (chip physique), SWD\RADIO (nœud radio virtuel), WMI, et l'API native Win32 `bluetoothapis.dll` via P/Invoke.
 
+Le module expose également `iwconfig`, équivalent Windows de la commande Linux `iwconfig / iw`.  
+Liste, inspecte, active et désactive les adaptateurs Wi-Fi.  
+Croise **4 sources** : PnP, WMI (`Win32_NetworkAdapter`), `netsh wlan` (données radio live), et le registre (throttling, géolocalisation, Wi-Fi Scan/Sense).
+
 ---
 
 ## Installation
@@ -400,3 +404,288 @@ défaut              → $getData → $doList + $doInfo
 - `BluetoothFindRadioClose`
 - `BluetoothGetRadioInfo`
 - `CloseHandle`
+
+---
+
+---
+
+# iwconfig
+
+Auteur : ps81frt  
+Fichier: `hciconfig.psm1` (même module)  
+Requis : PowerShell **5.1+** — Windows 10/11
+
+## Description
+
+Fonction PowerShell équivalente à `iwconfig / iw` Linux.  
+Liste, inspecte, active et désactive les adaptateurs Wi-Fi.  
+Croise **4 sources** : PnP (chip physique), WMI `Win32_NetworkAdapter` (MAC, nom réseau), `netsh wlan` (données radio live : SSID, signal, débit, canal), et le registre Windows (throttling réseau, géolocalisation, Wi-Fi Scan/Sense).
+
+---
+
+## Syntaxe
+
+```
+iwconfig                                           # défaut : liste courte + détail tous
+iwconfig -l  | -list                               # liste courte
+iwconfig -i  | -info                               # détail tous les adaptateurs
+iwconfig -i  -id "<Nom>"                           # détail un seul adaptateur
+iwconfig -i  -all                                  # détail complet tous (propriétés étendues)
+iwconfig -i  -id "<Nom>" -all                      # détail complet un seul
+iwconfig -up   -id "<Nom>"                         # activer  [admin requis]
+iwconfig -down -id "<Nom>"                         # désactiver  [admin requis]
+iwconfig -throttling enable|disable                # NetworkThrottlingIndex  [admin requis]
+iwconfig -geoloc enable|disable                    # service lfsvc  [admin requis]
+iwconfig -h  | -help                               # aide courte
+iwconfig -m  | -man                               # manuel complet
+iwconfig -bwtest                                   # test bande passante (4 streams, 15 sec)
+iwconfig -bwtest -parallelism 8 -durationSec 30   # bwtest paramétré
+
+# Export vers fichier
+iwconfig -i -id "Wi-Fi" -all *> wifi.txt
+```
+
+> `-id` prend le **nom de l'interface réseau** (ex: `'Wi-Fi'`, `'Wi-Fi 2'`), récupérable via `iwconfig -l`.
+
+---
+
+## Paramètres
+
+| Paramètre | Type | Description |
+|-----------|------|-------------|
+| `-l` / `-list` | switch | Liste courte |
+| `-i` / `-info` | switch | Vue détaillée |
+| `-a` / `-all` | switch | Propriétés étendues (tous les DEVPKEY disponibles) |
+| `-up` | switch | Active l'adaptateur ciblé par `-id` |
+| `-down` | switch | Désactive l'adaptateur ciblé par `-id` |
+| `-id` | string | Nom de l'interface réseau (ex: `'Wi-Fi'`) |
+| `-throttling` | string | `enable` ou `disable` — contrôle `NetworkThrottlingIndex` |
+| `-geoloc` | string | `enable` ou `disable` — contrôle le service `lfsvc` |
+| `-bwtest` | switch | Lance le test de bande passante |
+| `-parallelism` | int | Nombre de streams parallèles pour `-bwtest` (défaut : 4) |
+| `-durationSec` | int | Durée du test en secondes pour `-bwtest` (défaut : 15) |
+| `-h` / `-help` | switch | Aide courte |
+| `-m` / `-man` | switch | Manuel complet |
+
+---
+
+## Équivalences Linux → Windows
+
+| Linux | Windows |
+|-------|---------|
+| `iwconfig` | `iwconfig` |
+| `iw dev` | `iwconfig -l` |
+| `iwconfig wlan0` | `iwconfig -i -id "Wi-Fi"` |
+| `ip link set wlan0 up` | `iwconfig -up -id "Wi-Fi"` |
+| `ip link set wlan0 down` | `iwconfig -down -id "Wi-Fi"` |
+
+---
+
+## Architecture interne
+
+### Blocs
+
+| Bloc | Type | Rôle |
+|------|------|------|
+| `Get-NetshWlanInterfaces` | fonction interne | Parse `netsh wlan show interfaces` (FR/EN) |
+| `Get-NetshWlanProfiles` | fonction interne | Parse `netsh wlan show profiles` |
+| `Get-NetshWlanDrivers` | fonction interne | Parse `netsh wlan show drivers` |
+| `$getData` | scriptblock | Collecte et fusion de toutes les sources |
+| `$doList` | scriptblock | Affichage court |
+| `$doInfo` | scriptblock | Affichage détaillé par sections |
+| `$doBwTest` | scriptblock | Test de bande passante multi-stream |
+| `$doHelp` | scriptblock | Aide courte |
+| `$doMan` | scriptblock | Manuel complet (here-string) |
+
+---
+
+## Bloc `$getData` — détail
+
+### Sources croisées
+
+| Variable | Source | Filtre |
+|----------|--------|--------|
+| `$wmiNets` | `Get-WmiObject Win32_NetworkAdapter` | `AdapterType` 802.11 ou `Name` Wi-Fi/Wireless |
+| `$pnpAll` | `Get-PnpDevice -Class Net` | `FriendlyName` Wi-Fi/Wireless/802.11/WLAN |
+| `$netshAll` | `Get-NetshWlanInterfaces` | Toutes interfaces `netsh wlan show interfaces` |
+| `$profileList` | `Get-NetshWlanProfiles` | Tous les profils `netsh wlan show profiles` |
+| `$driverInfo` | `Get-NetshWlanDrivers` | Standards radio supportés, Hosted Network |
+
+### Propriétés lues via `Get-PnpDeviceProperty`
+
+| Variable | DEVPKEY |
+|----------|---------|
+| `$driver` | `DEVPKEY_Device_DriverVersion` |
+| `$driverDate` | `DEVPKEY_Device_DriverDate` |
+| `$mfg` | `DEVPKEY_Device_Manufacturer` |
+| `$desc` | `DEVPKEY_Device_DeviceDesc` |
+| `$busType` | `DEVPKEY_Device_BusReportedDeviceDesc` |
+| `$locInfo` | `DEVPKEY_Device_LocationInfo` |
+| `$enumerator` | `DEVPKEY_Device_EnumeratorName` |
+| `$class` | `DEVPKEY_Device_Class` |
+| `$hwIds` | `DEVPKEY_Device_HardwareIds` |
+| `$infPath` | `DEVPKEY_Device_DriverInfPath` |
+| `$infSection` | `DEVPKEY_Device_DriverInfSection` |
+| `$service` | `DEVPKEY_Device_Service` |
+| `$busNum` | `DEVPKEY_Device_BusNumber` |
+| `$busAddr` | `DEVPKEY_Device_Address` |
+
+### Données lues depuis le registre
+
+| Valeur | Chemin registre | Usage |
+|--------|----------------|-------|
+| `NetworkThrottlingIndex` | `HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile` | Throttling réseau |
+| `AutoConnectAllowedOEM` | `HKLM:\SOFTWARE\Microsoft\WcmSvc\wifinetworkmanager\config` | Wi-Fi Scan |
+| `AllowWiFiHotSpotReporting` | `HKLM:\SOFTWARE\Microsoft\PolicyManager\default\WiFi\...` | Wi-Fi Sense |
+
+### Déduction bande depuis canal
+
+| Plage canal | Bande |
+|-------------|-------|
+| 1 – 14 | 2.4 GHz |
+| 36 – 177 | 5 GHz |
+| 1 – 233 + RadioType `*6*` | 6 GHz |
+
+### Objet PSCustomObject retourné par `$getData`
+
+| Champ | Source |
+|-------|--------|
+| `Nom` | PnP FriendlyName |
+| `NetName` | WMI `NetConnectionID` → FriendlyName fallback |
+| `Description` | PnP DEVPKEY |
+| `Fabricant` | PnP DEVPKEY |
+| `BusDesc` | PnP DEVPKEY |
+| `Enumerateur` | PnP DEVPKEY |
+| `Classe` | PnP DEVPKEY → PnP .Class |
+| `Statut` | PnP .Status |
+| `RadioUp` | netsh State → `UP`/`DOWN`, PnP Status fallback |
+| `State` | netsh raw State string |
+| `InstanceId` | PnP |
+| `HardwareIds` | PnP DEVPKEY (joint `, `) |
+| `Location` | PnP DEVPKEY |
+| `BusNumber` | PnP DEVPKEY |
+| `BusAddress` | PnP DEVPKEY |
+| `MACAddress` | WMI `MACAddress` → netsh `Physical_address` fallback |
+| `SSID` | netsh |
+| `BSSID` | netsh |
+| `RadioType` | netsh `Radio_type` |
+| `Band` | déduit depuis `Channel` |
+| `Channel` | netsh |
+| `Signal` | netsh (%) |
+| `TxRate` | netsh `Transmit_rate_(Mbps)` |
+| `RxRate` | netsh `Receive_rate_(Mbps)` |
+| `Auth` | netsh `Authentication` |
+| `Cipher` | netsh `Cipher` |
+| `DrvRadioTypes` | `netsh wlan show drivers` |
+| `DrvHostedNet` | `netsh wlan show drivers` |
+| `NetworkThrottlingIndex` | Registre (formaté) |
+| `GeoLocSvc` | `Get-Service lfsvc` → `ACTIF`/`INACTIF` |
+| `WifiScan` | Registre → `ACTIF`/`DESACTIVE` |
+| `WifiSense` | Registre → `ACTIF`/`DESACTIVE` |
+| `Profiles` | `netsh wlan show profiles` |
+| `DriverVer` | PnP DEVPKEY |
+| `DriverDate` | PnP DEVPKEY (formaté `yyyy-MM-dd`) |
+| `InfPath` | PnP DEVPKEY |
+| `InfSection` | PnP DEVPKEY |
+| `Service` | PnP DEVPKEY |
+| `_RawProps` | Toutes les DEVPKEY brutes (pour `-all`) |
+
+---
+
+## Bloc `$doInfo` — sections affichées
+
+```
+── Identite ──────   Nom, Interface (NetName), Description, Fabricant, Bus,
+                     Enumerateur, Classe
+── Etat ──────────   Radio UP/DOWN, Statut PnP, Etat netsh
+── Identifiants ──   InstanceId, HardwareIds, Location, Bus Number, Bus Address
+── Radio Wi-Fi ───   MAC Address, Standards supportés, Hosted Network,
+                     SSID, BSSID, Standard (RadioType), Bande, Canal,
+                     Signal, Tx/Rx Rate, Auth, Cipher, NetworkThrottlingIndex
+── Geolocalisation   Location Svc (lfsvc), WiFi Scan, WiFi Sense
+── Profils ───────   Liste des profils sauvegardés (netsh wlan show profiles)
+── Driver ────────   Version, Date, INF, INF Section, Service,
+                     Svc Status/StartType/DisplayName, SYS Path
+── Proprietes ────   (si -all) dump intégral de tous les DEVPKEY disponibles
+  etendues (-all)
+```
+
+---
+
+## Bloc `$doList` — affichage court
+
+Par adaptateur : `[Statut][UP/DOWN] Nom`, MAC Address, SSID, InstanceId.  
+Couleurs : vert = OK, rouge = Error, jaune = autre.
+
+---
+
+## Bloc `$doBwTest` — test bande passante
+
+Lance `$parallelism` streams parallèles (via `RunspacePool`) pour mesurer :
+
+- **Download** : téléchargement depuis `http://proof.ovh.net/files/100Mb.dat` pendant `$durationSec` secondes.
+- **Upload** : envoi chunked vers `https://httpbin.org/post` pendant `$durationSec` secondes.
+- **Ping** : `Test-Connection proof.ovh.net -Count 4`, latence moyenne.
+
+Affichage en temps réel avec barre de progression. Résultat final en tableau :
+
+```
+┌─────────────────────────────┐
+│  Ping     :    12 ms        │
+│  Download :  94.32 Mbps     │
+│  Upload   :  41.87 Mbps     │
+└─────────────────────────────┘
+```
+
+---
+
+## Logique de dispatch
+
+```
+-h / -help              → $doHelp ; return
+-m / -man               → $doMan  ; return
+--help / --man          → idem (via $args)
+-bwtest                 → $doBwTest ; return
+-up                     → vérifie admin + id → Enable-NetAdapter ; return
+-down                   → vérifie admin + id → Disable-NetAdapter ; return
+-throttling enable      → NetworkThrottlingIndex = 10 [admin requis]
+-throttling disable     → NetworkThrottlingIndex = 0xFFFFFFFF [admin requis]
+-geoloc enable          → Set-Service lfsvc Automatic + Start [admin requis]
+-geoloc disable         → Stop-Service lfsvc + Disabled [admin requis]
+-l / -list              → $getData → $doList ; return
+-i / -info + -id        → $getData → filtre NetName/Nom → $doInfo ; return
+-i / -info sans -id     → $getData → $doInfo ; return
+-a / -all               → $getData → $doList + $doInfo ; return
+défaut                  → $getData → $doList + $doInfo
+```
+
+---
+
+## Droits requis
+
+| Opération | Admin |
+|-----------|-------|
+| Lecture (list, info, bwtest) | Non |
+| `-up` / `-down` | Oui |
+| `-throttling` | Oui |
+| `-geoloc` | Oui |
+
+---
+
+## Cmdlets et API utilisées
+
+**PowerShell / .NET :**
+- `Get-PnpDevice`, `Get-PnpDeviceProperty`
+- `Enable-NetAdapter`, `Disable-NetAdapter`
+- `Get-WmiObject Win32_NetworkAdapter`, `Win32_SystemDriver`
+- `Get-Service`, `Set-Service`, `Start-Service`, `Stop-Service`
+- `Get-ItemProperty`, `Set-ItemProperty` (registre)
+- `Test-Connection`
+- `[System.Net.HttpWebRequest]` (bwtest)
+- `[RunspaceFactory]`, `[PowerShell]` (bwtest parallélisme)
+- `[Security.Principal.WindowsPrincipal]`
+
+**Commandes système :**
+- `netsh wlan show interfaces`
+- `netsh wlan show profiles`
+- `netsh wlan show drivers`

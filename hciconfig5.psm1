@@ -1,4 +1,4 @@
-﻿function hciconfig {
+function hciconfig {
 <#
 .SYNOPSIS
     Equivalent Windows de la commande Linux hciconfig.

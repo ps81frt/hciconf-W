@@ -61,7 +61,7 @@ if (Test-Path $src5) {
         [System.IO.File]::WriteAllBytes($target5, $bytes)
     }
 
-    # Copier et adapter le psd1
+    # Copier le psd1 (garde PowerShellVersion = 5.1 pour PS5.1)
     if (Test-Path $srcPsd) { 
         Copy-Item $srcPsd "$dest5\hciconfig.psd1" -Force
     }
@@ -82,16 +82,27 @@ if (Test-Path $src7) {
     Copy-Item $src7 $target7 -Force
     Unblock-File $target7
     
-    # Copier le psd1
+    # Copier le psd1 et retirer PowerShellVersion pour compatibilité PS7
     if (Test-Path $srcPsd) { 
-        Copy-Item $srcPsd "$dest7\hciconfig.psd1" -Force
+        $psd7 = "$dest7\hciconfig.psd1"
+        Copy-Item $srcPsd $psd7 -Force
+        (Get-Content $psd7 -Raw) -replace "PowerShellVersion\s*=\s*'5\.1'", "PowerShellVersion = '7.0'" |
+            Set-Content $psd7 -Encoding UTF8
     }
     
     Write-Host "  [OK] Installe pour PS7 : $dest7" -ForegroundColor Green
     Write-Host "       (hciconfig.psm1 original)" -ForegroundColor DarkGray
 }
 
-# 7. Nettoyage
+# 7. PSModulePath persistant PS7 si manquant
+$modPath7 = "$env:USERPROFILE\Documents\PowerShell\Modules"
+$currentPath = [System.Environment]::GetEnvironmentVariable('PSModulePath', 'User')
+if ($currentPath -notlike "*$modPath7*") {
+    [System.Environment]::SetEnvironmentVariable('PSModulePath', "$currentPath;$modPath7", 'User')
+    Write-Host "  [OK] PSModulePath PS7 mis a jour" -ForegroundColor Green
+}
+
+# 8. Nettoyage
 Remove-Item "$env:TEMP\hciconf-W" -Recurse -Force
 
 Write-Host "`n  [OK] Installation terminee !" -ForegroundColor Green
